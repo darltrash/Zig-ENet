@@ -2,7 +2,6 @@ const std = @import("std");
 const enet = @import("enet");
 
 pub fn main() !void {
- 
     try enet.initialize();
 
     var address: enet.Address = std.mem.zeroes(enet.Address);
@@ -27,12 +26,15 @@ pub fn main() !void {
         switch (event.type) {
             .receive => {
                 if (event.packet) |packet| {
-                    std.log.debug("A packet of length {d} was received from {d}:{d} on channel {d}.", .{
-                        packet.dataLength,
-                        event.peer.?.address.host,
-                        event.peer.?.address.port,
-                        event.channelID,
-                    });
+                    std.log.debug(
+                        "A packet of length {d} was received from {d}:{d} on channel {d}.",
+                        .{
+                            packet.dataLength,
+                            event.peer.?.address.host,
+                            event.peer.?.address.port,
+                            event.channelID,
+                        },
+                    );
                 }
             },
             else => {},

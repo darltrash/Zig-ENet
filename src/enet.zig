@@ -119,17 +119,17 @@ const UnixPlatform = struct {
         }
 
         fn index(fd: SocketHandle) usize {
-            return @intCast(usize, @divFloor(fd, mask_bits));
+            return @intCast(@divFloor(fd, mask_bits));
         }
         fn mask(fd: SocketHandle) Mask {
-            return @shlExact(@as(Mask, 1), @intCast(MaskShift, @mod(fd, mask_bits)));
+            return @shlExact(@as(Mask, 1), @intCast(@mod(fd, mask_bits)));
         }
     };
 };
 
 pub inline fn HOST_TO_NET(a: anytype) @TypeOf(a) {
     if (builtin.endian == .little) {
-        return @byteSwap(@TypeOf(a), a);
+        return @byteSwap(a);
     } else {
         return a;
     }
@@ -137,7 +137,7 @@ pub inline fn HOST_TO_NET(a: anytype) @TypeOf(a) {
 
 pub inline fn NET_TO_HOST(a: anytype) @TypeOf(a) {
     if (builtin.endian == .little) {
-        return @byteSwap(@TypeOf(a), a);
+        return @byteSwap(a);
     } else {
         return a;
     }
@@ -161,7 +161,7 @@ pub const time = struct {
 };
 
 // enet/protocol.h
-pub const Protocol = packed union {
+pub const Protocol = extern union {
     pub const MINIMUM_MTU = 576;
     pub const MAXIMUM_MTU = 4096;
     pub const MAXIMUM_PACKET_COMMANDS = 32;
@@ -204,7 +204,7 @@ pub const Protocol = packed union {
         pub const mask = 0xF;
     };
 
-    pub const Flags = packed struct {
+    pub const Flags = extern struct {
         __pad0: u6 = 0,
         command_unsequenced: bool = false,
         command_acknowledge: bool = false,
@@ -217,24 +217,24 @@ pub const Protocol = packed union {
         pub const header_mask = Flags{ .header_compressed = true, .header_sent_time = true };
     };
 
-    pub const Header = packed struct {
+    pub const Header = extern struct {
         peerID: u16,
         sentTime: u16,
     };
 
-    pub const CommandHeader = packed struct {
+    pub const CommandHeader = extern struct {
         command: Command,
         channelID: u8,
         reliableSequenceNumber: u16,
     };
 
-    pub const Acknowledge = packed struct {
+    pub const Acknowledge = extern struct {
         header: CommandHeader,
         receivedReliableSequenceNumber: u16,
         receivedSentTime: u16,
     };
 
-    pub const Connect = packed struct {
+    pub const Connect = extern struct {
         header: CommandHeader,
         outgoingPeerID: u16,
         incomingSessionID: u8,
@@ -251,7 +251,7 @@ pub const Protocol = packed union {
         data: u32,
     };
 
-    pub const VerifyConnect = packed struct {
+    pub const VerifyConnect = extern struct {
         header: CommandHeader,
         outgoingPeerID: u16,
         incomingSessionID: u8,
@@ -267,46 +267,46 @@ pub const Protocol = packed union {
         connectID: u32,
     };
 
-    pub const BandwidthLimit = packed struct {
+    pub const BandwidthLimit = extern struct {
         header: CommandHeader,
         incomingBandwidth: u32,
         outgoingBandwidth: u32,
     };
 
-    pub const ThrottleConfigure = packed struct {
+    pub const ThrottleConfigure = extern struct {
         header: CommandHeader,
         packetThrottleInterval: u32,
         packetThrottleAcceleration: u32,
         packetThrottleDeceleration: u32,
     };
 
-    pub const Disconnect = packed struct {
+    pub const Disconnect = extern struct {
         header: CommandHeader,
         data: u32,
     };
 
-    pub const Ping = packed struct {
+    pub const Ping = extern struct {
         header: CommandHeader,
     };
 
-    pub const SendReliable = packed struct {
+    pub const SendReliable = extern struct {
         header: CommandHeader,
         dataLength: u16,
     };
 
-    pub const SendUnreliable = packed struct {
+    pub const SendUnreliable = extern struct {
         header: CommandHeader,
         unreliableSequenceNumber: u16,
         dataLength: u16,
     };
 
-    pub const SendUnsequenced = packed struct {
+    pub const SendUnsequenced = extern struct {
         header: CommandHeader,
         unsequencedGroup: u16,
         dataLength: u16,
     };
 
-    pub const SendFragment = packed struct {
+    pub const SendFragment = extern struct {
         header: CommandHeader,
         startSequenceNumber: u16,
         dataLength: u16,
@@ -387,12 +387,12 @@ pub fn List(comptime T: type) type {
         /// Returns the first item in the list.
         pub inline fn front(self: *@This()) *T {
             assert(!self.empty());
-            return @intToPtr(*T, @ptrToInt(self.sentinel.next));
+            return @alignCast(@ptrCast(self.sentinel.next));
         }
         /// Returns the last item in the list.
         pub inline fn back(self: *@This()) *T {
             assert(!self.empty());
-            return @intToPtr(*T, @ptrToInt(self.sentinel.previous));
+            return @alignCast(@ptrCast(self.sentinel.previous));
         }
 
         /// Returns a pointer to the first node in the list
@@ -410,14 +410,14 @@ pub fn List(comptime T: type) type {
         }
 
         const Iterator = struct {
-            next: *ListNode,
-            end: *ListNode,
+            next_node: *ListNode,
+            end_node: *ListNode,
 
             pub fn next(self: *Iterator) ?*T {
-                if (self.next == self.end) return null;
-                const curr = self.next;
-                self.next = curr.next;
-                return @intToPtr(*T, @ptrToInt(curr));
+                if (self.next_node == self.end_node) return null;
+                const curr = self.next_node;
+                self.next_node = curr.next;
+                return @alignCast(@ptrCast(curr));
             }
         };
     };
@@ -444,15 +444,15 @@ pub fn VERSION_CREATE(major: u8, minor: u8, patch: u8) Version {
 }
 
 pub fn VERSION_GET_MAJOR(version: Version) u8 {
-    return @truncate(u8, version >> 16);
+    return @truncate(version >> 16);
 }
 
 pub fn VERSION_GET_MINOR(version: Version) u8 {
-    return @truncate(u8, version >> 8);
+    return @truncate(version >> 8);
 }
 
 pub fn VERSION_GET_PATCH(version: Version) u8 {
-    return @truncate(u8, version >> 0);
+    return @truncate(version >> 0);
 }
 
 pub const VERSION = VERSION_CREATE(VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH);
@@ -532,26 +532,26 @@ pub const Socket = extern struct {
     pub fn send(self: Socket, buffers: []const pl.Buffer) !usize {
         const rc = raw.enet_socket_send(self.handle, null, buffers.ptr, buffers.len);
         if (rc < 0) return error.ENetError;
-        return @intCast(usize, rc);
+        return @intCast(rc);
     }
 
     pub fn sendTo(self: Socket, address: Address, buffers: []const pl.Buffer) !usize {
         const rc = raw.enet_socket_send(self.handle, &address, buffers.ptr, buffers.len);
         if (rc < 0) return error.ENetError;
-        return @intCast(usize, rc);
+        return @intCast(rc);
     }
 
     pub fn receive(self: Socket, out_address: ?*Address, buffers: []pl.Buffer) !usize {
         const rc = raw.enet_socket_receive(self.handle, out_address, buffers.ptr, buffers.len);
         if (rc < 0) return error.ENetError;
-        return @intCast(usize, rc);
+        return @intCast(rc);
     }
 
     pub fn wait(self: Socket, condition: SocketWait, timeout: u32) !SocketWait {
-        var mut_cond = @bitCast(u32, condition);
+        var mut_cond: u32 = @bitCast(condition);
         const rc = raw.enet_socket_wait(self.handle, &mut_cond, timeout);
         if (rc < 0) return error.ENetError;
-        return @bitCast(SocketWait, mut_cond);
+        return @bitCast(mut_cond);
     }
 
     pub fn set_option(self: Socket, option: SocketOption, value: c_int) !void {
@@ -617,7 +617,7 @@ pub const Address = extern struct {
     pub fn get_host_ip(self: Address, buffer: []u8) ![*:0]u8 {
         const rc = raw.enet_address_get_host_ip(&self, buffer.ptr, buffer.len);
         if (rc < 0) return error.ENetError;
-        return @ptrCast([*:0]u8, buffer.ptr);
+        return @ptrCast(buffer.ptr);
     }
 
     /// Attempts to do a reverse lookup of the host field in the address parameter.
@@ -627,7 +627,7 @@ pub const Address = extern struct {
     pub fn get_host(self: Address, buffer: []u8) ![*:0]u8 {
         const rc = raw.enet_address_get_host(&self, buffer.ptr, buffer.len);
         if (rc < 0) return error.ENetError;
-        return @ptrCast([*:0]u8, buffer.ptr);
+        return @ptrCast(buffer.ptr);
     }
 };
 
@@ -702,7 +702,7 @@ pub const Packet = extern struct {
     dataLength: usize,
 
     /// function to be called when the packet is no longer in use
-    freeCallback: ?PacketFreeCallback,
+    freeCallback: ?*PacketFreeCallback,
 
     /// application private data, may be freely modified
     userData: ?*anyopaque,
@@ -710,7 +710,7 @@ pub const Packet = extern struct {
     /// Creates a packet that may be sent to a peer.
     /// @param data    initial contents of the packet's data
     pub fn create(data: []u8, flags: PacketFlags) !*Packet {
-        const packet = raw.enet_packet_create(data.ptr, data.len, @bitCast(u32, flags));
+        const packet = raw.enet_packet_create(data.ptr, data.len, @bitCast(flags));
         if (packet) |p| return p;
         return error.ENetError;
     }
@@ -718,7 +718,7 @@ pub const Packet = extern struct {
     /// Creates a packet that may be sent to a peer.
     /// @param len    length of the packet's data
     pub fn create_uninitialized(len: usize, flags: PacketFlags) !*Packet {
-        const packet = raw.enet_packet_create(null, len, @bitCast(u32, flags));
+        const packet = raw.enet_packet_create(null, len, @bitCast(flags));
         if (packet) |p| return p;
         return error.ENetError;
     }
@@ -1042,7 +1042,7 @@ pub const Compressor = extern struct {
     context: *anyopaque,
 
     /// Compresses from inBuffers[0..inBufferCount], containing inLimit bytes, to outData, outputting at most outLimit bytes. Should return 0 on failure.
-    compress: fn (
+    compress: ?*fn (
         context: *anyopaque,
         inBuffers: [*]const pl.Buffer,
         inBufferCount: usize,
@@ -1052,7 +1052,7 @@ pub const Compressor = extern struct {
     ) callconv(.C) usize,
 
     /// Decompresses from inData, containing inLimit bytes, to outData, outputting at most outLimit bytes. Should return 0 on failure.
-    decompress: fn (
+    decompress: ?*fn (
         context: *anyopaque,
         inData: [*]const u8,
         inLimit: usize,
@@ -1061,7 +1061,7 @@ pub const Compressor = extern struct {
     ) callconv(.C) usize,
 
     /// Destroys the context when compression is disabled or the host is destroyed. May be NULL.
-    destroy: ?fn (
+    destroy: ?*fn (
         context: *anyopaque,
     ) callconv(.C) void,
 };
@@ -1103,7 +1103,7 @@ pub const Host = extern struct {
     buffers: [BUFFER_MAXIMUM]pl.Buffer,
     bufferCount: usize,
     /// callback the user can set to enable packet checksums for this host
-    checksum: ?ChecksumCallback,
+    checksum: ?*ChecksumCallback,
     compressor: Compressor,
     packetData: [2][Protocol.MAXIMUM_MTU]u8,
     receivedAddress: Address,
@@ -1118,7 +1118,7 @@ pub const Host = extern struct {
     /// total UDP packets received, user should reset to 0 as needed to prevent overflow
     totalReceivedPackets: u32,
     /// callback the user can set to intercept received raw UDP packets
-    intercept: ?InterceptCallback,
+    intercept: ?*InterceptCallback,
     connectedPeers: usize,
     bandwidthLimitedPeers: usize,
     /// optional number of allowed peers from duplicate IPs, defaults to Protocol.MAXIMUM_PEER_ID

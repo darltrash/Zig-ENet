@@ -16,19 +16,32 @@ pub fn main() !void {
 
         // wait 1000 ms (1 second) for an event
         while (try server.service(&event, 1000)) {
+            const peer = event.peer.?;
             switch (event.type) {
                 .connect => {
-                    std.log.debug("A new client connected from {d}:{d}.", .{ event.peer.?.address.host, event.peer.?.address.port });
+                    std.log.debug(
+                        "A new client connected from {d}:{d}.",
+                        .{
+                            event.peer.?.address.host,
+                            event.peer.?.address.port,
+                        },
+                    );
                 },
                 .receive => {
-                    
                     if (event.packet) |packet| {
-                        std.log.debug("A packet of length {d} was received from {s} on channel {d}.", .{packet.dataLength, event.peer.?.data, event.channelID});
+                        std.log.debug(
+                            "A packet of length {d} was received from {?} on channel {d}.",
+                            .{
+                                packet.dataLength,
+                                event.peer.?.data,
+                                event.channelID,
+                            },
+                        );
                         packet.destroy();
                     }
                 },
                 .disconnect => {
-                    std.log.debug("{s} disconnected.", .{event.peer.?.data});
+                    std.log.debug("{?} disconnected.", .{peer.data});
                     event.peer.?.data = null;
                 },
                 else => {

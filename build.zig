@@ -1,109 +1,104 @@
 const std = @import("std");
 
-pub fn build(b: *std.build.Builder) void {
-    const build_mode = b.standardReleaseOptions();
+pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
-    const tests = buildTests(b, build_mode, target);
+    const optimize = b.standardOptimizeOption(.{});
 
-    const lib_step = buildLibrary(b, build_mode, target);
-    lib_step.install();
+    const lib_mod = b.createModule(.{
+        .root_source_file = b.path("src/enet.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
 
-    const test_step = b.step("test", "Run enet tests");
-    test_step.dependOn(&tests.step);
+    const lib = b.addLibrary(.{
+        .linkage = .static,
+        .name = "enet",
+        .root_module = lib_mod,
+    });
 
-    {
-        const client_exe = b.addExecutable("client", "examples/client.zig");
-        client_exe.setBuildMode(build_mode);
-        client_exe.setTarget(target);
-        link(b, client_exe);
-
-        const client_install = b.addInstallArtifact(client_exe);
-
-        const client_build_step = b.step("examples:client:install", "Build the client example");
-        client_build_step.dependOn(&client_install.step);
-
-        const client_run_step = b.step("examples:client:run", "Run the client example");
-        client_run_step.dependOn(&client_exe.run().step);
-    }
-
-    {
-        const server_exe = b.addExecutable("server", "examples/server.zig");
-        server_exe.setBuildMode(build_mode);
-        server_exe.setTarget(target);
-        link(b, server_exe);
-
-        const server_install = b.addInstallArtifact(server_exe);
-
-        const server_build_step = b.step("examples:server:install", "Build the server example");
-        server_build_step.dependOn(&server_install.step);
-
-        const server_run_step = b.step("examples:server:run", "Run the server example");
-        server_run_step.dependOn(&server_exe.run().step);
-    }
-}
-
-pub fn buildTests(
-    b: *std.build.Builder,
-    build_mode: std.builtin.Mode,
-    target: std.zig.CrossTarget,
-) *std.build.LibExeObjStep {
-    const tests = b.addTest(thisDir() ++ "/enet.zig");
-    tests.setBuildMode(build_mode);
-    tests.setTarget(target);
-    link(b, tests);
-    return tests;
-}
-
-pub fn buildLibrary(
-    b: *std.build.Builder,
-    build_mode: std.builtin.Mode,
-    target: std.zig.CrossTarget,
-) *std.build.LibExeObjStep {
-    const lib = b.addStaticLibrary("enet", null);
-
-    lib.setBuildMode(build_mode);
-    lib.setTarget(target);
     lib.want_lto = false;
-    lib.addIncludeDir(thisDir() ++ "/enet/include");
-    lib.linkSystemLibrary("c");
+    lib.linkLibC();
 
-    if (target.isWindows()) {
+    if (target.result.os.tag == .windows) {
         lib.linkSystemLibrary("ws2_32");
         lib.linkSystemLibrary("winmm");
     }
 
-    const defines = .{
-        "-DHAS_FCNTL=1",
-        "-DHAS_POLL=1",
-        "-DHAS_GETNAMEINFO=1",
-        "-DHAS_GETADDRINFO=1",
-        "-DHAS_GETHOSTBYNAME_R=1",
-        "-DHAS_GETHOSTBYADDR_R=1",
-        "-DHAS_INET_PTON=1",
-        "-DHAS_INET_NTOP=1",
-        "-DHAS_MSGHDR_FLAGS=1",
-        "-DHAS_SOCKLEN_T=1",
-        "-fno-sanitize=undefined",
-    };
-    lib.addCSourceFile(thisDir() ++ "/enet/callbacks.c", &defines);
-    lib.addCSourceFile(thisDir() ++ "/enet/compress.c", &defines);
-    lib.addCSourceFile(thisDir() ++ "/enet/host.c", &defines);
-    lib.addCSourceFile(thisDir() ++ "/enet/list.c", &defines);
-    lib.addCSourceFile(thisDir() ++ "/enet/packet.c", &defines);
-    lib.addCSourceFile(thisDir() ++ "/enet/peer.c", &defines);
-    lib.addCSourceFile(thisDir() ++ "/enet/protocol.c", &defines);
-    lib.addCSourceFile(thisDir() ++ "/enet/unix.c", &defines);
-    lib.addCSourceFile(thisDir() ++ "/enet/win32.c", &defines);
+    lib.addIncludePath(b.path("src/enet/include/"));
 
-    return lib;
+    lib.addCSourceFiles(.{
+        .files = &[_][]const u8{
+            "callbacks.c",
+            "compress.c",
+            "host.c",
+            "list.c",
+            "packet.c",
+            "peer.c",
+            "protocol.c",
+            "unix.c",
+            "win32.c",
+        },
+        .flags = &[_][]const u8{
+            "-DHAS_FCNTL=1",
+            "-DHAS_POLL=1",
+            "-DHAS_GETNAMEINFO=1",
+            "-DHAS_GETADDRINFO=1",
+            "-DHAS_GETHOSTBYNAME_R=1",
+            "-DHAS_GETHOSTBYADDR_R=1",
+            "-DHAS_INET_PTON=1",
+            "-DHAS_INET_NTOP=1",
+            "-DHAS_MSGHDR_FLAGS=1",
+            "-DHAS_SOCKLEN_T=1",
+            "-fno-sanitize=undefined",
+        },
+        .root = b.path("src/enet"),
+    });
+
+    b.installArtifact(lib);
+
+    add_example(b, lib_mod, target, optimize, "client");
+    add_example(b, lib_mod, target, optimize, "server");
+
+    const lib_unit_tests = b.addTest(.{
+        .root_module = lib_mod,
+    });
+
+    const run_lib_unit_tests = b.addRunArtifact(lib_unit_tests);
+
+    const test_step = b.step("test", "Run unit tests");
+    test_step.dependOn(&run_lib_unit_tests.step);
 }
 
-pub fn link(b: *std.build.Builder, step: *std.build.LibExeObjStep) void {
-    const lib = buildLibrary(b, step.build_mode, step.target);
-    step.linkLibrary(lib);
-    step.addPackagePath("enet", thisDir() ++ "/enet.zig");
-}
+fn add_example(
+    b: *std.Build,
+    m: *std.Build.Module,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+    comptime name: []const u8,
+) void {
+    const exe_mod = b.createModule(.{
+        .root_source_file = b.path("src/examples/" ++ name ++ ".zig"),
+        .target = target,
+        .optimize = optimize,
+    });
 
-fn thisDir() []const u8 {
-    return std.fs.path.dirname(@src().file) orelse ".";
+    exe_mod.addImport("enet", m);
+
+    const exe = b.addExecutable(.{
+        .name = "demo-" ++ name,
+        .root_module = exe_mod,
+    });
+
+    b.installArtifact(exe);
+
+    const run_cmd = b.addRunArtifact(exe);
+
+    run_cmd.step.dependOn(b.getInstallStep());
+
+    if (b.args) |args| {
+        run_cmd.addArgs(args);
+    }
+
+    const run_step = b.step("demo-" ++ name, "Run '" ++ name ++ "' demo");
+    run_step.dependOn(&run_cmd.step);
 }

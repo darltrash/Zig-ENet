@@ -1,0 +1,16 @@
+.{
+    .name = .enet,
+    .version = "0.0.1",
+
+    .fingerprint = 0x201714c0a9fb5428,
+
+    .minimum_zig_version = "0.14.1",
+
+    .dependencies = .{},
+
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+    },
+}
